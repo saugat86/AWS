@@ -1,0 +1,116 @@
+Description:  This template deploys a VPC, with a public and private subnets spread
+  across two Availability Zones. It deploys an internet gateway, with a default
+  route on the public subnets. It deploys a pair of NAT gateways (one in each AZ),
+  and default routes for them in the private subnets.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+
+Resources:
+  #Creating a VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.0.0/16
+  
+  # Creating an Internet Gatewayy
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: {}
+  
+  # Attaching Gateway and VPC
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  
+  # Public Subnet
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 192.168.0.0/24
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+  
+  # Private Subnet
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 192.168.1.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+      
+  # Public Route Table
+  PubRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  
+  # Public Route
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PubRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  # Associating Route Table with Public Subnet
+  PubSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PubRouteTable
+      SubnetId: !Ref PublicSubnet
+  
+  # Defining Public Security Group
+  PubSecuritygrp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Security groupG
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+  
+  # Public EC2 in Public Subnet, associating Public Security Group and defining dependancy with Public Route Table 
+  PublicEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-03ededff12e34e59e"
+      KeyName: "saugat"
+      InstanceType: "t2.micro"
+      NetworkInterfaces:
+        - SubnetId: !Ref PublicSubnet
+          DeviceIndex: '0'
+          AssociatePublicIpAddress: "true"
+          GroupSet:
+            - !Ref PubSecuritygrp
+        
+    DependsOn:
+      - PubRouteTable
+
+  # Public EC2 in Public Subnet, associating Public Security Group and defining dependancy with Public Route Table 
+  PrivateEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-03ededff12e34e59e"
+      KeyName: "saugat"
+      InstanceType: "t2.micro"
+      NetworkInterfaces:
+        - SubnetId: !Ref PrivateSubnet
+          DeviceIndex: '0'
+          AssociatePublicIpAddress: "true"
+          GroupSet:
+            - !Ref PubSecuritygrp
+        
+    DependsOn:
+      - PubRouteTable
